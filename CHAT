@@ -1,0 +1,100 @@
+import re
+import spacy
+import nltk
+from collections import defaultdict
+from nltk.sentiment import SentimentIntensityAnalyzer
+import random
+
+# Download VADER for sentiment analysis
+nltk.download('vader_lexicon')
+sia = SentimentIntensityAnalyzer()
+
+# Load spaCy model
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    print("Spacy model not found. Run 'python -m spacy download en_core_web_sm' to install it.")
+    exit()
+
+# Track conversation keywords and frequency
+conversation_keywords = defaultdict(int)
+MAX_KEYWORDS = 3  # Number of keywords to reference
+context_reference_threshold = 5  # Number of messages before bringing up context
+message_count = 0  # Track messages to avoid frequent context reminders
+
+# Dynamic responses
+negative_responses = [
+    "That sounds really tough. Do you want to talk more about it?",
+    "I'm here to listen. What's on your mind?",
+    "That must be difficult. Want to share more?"
+]
+
+positive_responses = [
+    "That's great to hear! Tell me more!",
+    "I love that! What's been making you feel this way?",
+    "Sounds amazing! What else has been going well?"
+]
+
+neutral_responses = [
+    "Gotcha. Can you tell me a bit more?",
+    "Interesting. What else is going on?",
+    "Hmm, Iâd love to understand more about what you mean."
+]
+
+def extract_keywords(text):
+    doc = nlp(text.lower())
+    keywords = [ent.text for ent in doc.ents]  # Extract named entities
+    return keywords
+
+def update_keywords(keywords):
+    for word in keywords:
+        conversation_keywords[word] += 1
+
+def get_context_response():
+    global message_count
+    message_count += 1
+    
+    # Bring up context occasionally
+    if message_count % context_reference_threshold == 0 and conversation_keywords:
+        top_keywords = sorted(conversation_keywords.items(), key=lambda x: x[1], reverse=True)[:MAX_KEYWORDS]
+        keywords_str = ", ".join([f"'{k[0]}'" for k in top_keywords])
+        return f"\n\n(By the way, you mentioned {keywords_str} earlier. Want to dive deeper into that?)"
+    
+    return ""
+
+def get_response(user_input):
+    sentiment_score = sia.polarity_scores(user_input)["compound"]
+    sentiment_label = "positive" if sentiment_score > 0.05 else "negative" if sentiment_score < -0.05 else "neutral"
+    
+    keywords = extract_keywords(user_input)
+    update_keywords(keywords)
+    
+    if sentiment_label == "negative":
+        response = random.choice(negative_responses)
+    elif sentiment_label == "positive":
+        response = random.choice(positive_responses)
+    else:
+        response = random.choice(neutral_responses)
+    
+    response += get_context_response()
+    return response
+
+def chatbot():
+    print("Bot: Hey! I'm here to chat. What's on your mind? (Type 'quit' to exit)")
+    
+    while True:
+        user_input = input("You: ").strip()
+        
+        if user_input.lower() == 'quit':
+            print("Bot: Take care! Talk to you later. ð")
+            break
+        
+        if re.search(r'\b(suicide|self harm|kill myself|depressed|hopeless)\b', user_input.lower()):
+            print("Bot: â ï¸ Please reach out to someone who can help. You're not alone. Crisis helplines are available in your area.")
+            continue
+        
+        bot_reply = get_response(user_input)
+        print(f"Bot: {bot_reply}")
+
+if _name_ == "_main_":
+    chatbot()
